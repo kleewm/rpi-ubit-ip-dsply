@@ -1,0 +1,4 @@
+# run the script on reboot so that will try to display IP of pi for a few minutes
+# apr 2018
+# kenneth@ec1213.net
+@reboot /home/pi/ip-ubit >/dev/null 2>&1

@@ -1,0 +1,72 @@
+#!/bin/bash
+#
+# ip-ubit
+#
+# gets IP address of device and sends to ubit using "dsply-ubit.py"
+# waits for bluetooth to be ready then sends IP address of host to 
+# microbit via bluetooth
+#
+# requires sudo apt-get install expect
+# bluetoothctl
+#
+# store file in /home/pi directory and remember to chmod +x ip-ubit
+# if u want the PI to broadcast IP all day long use the following cron entry.
+# however do note that bluetooth connections will be interrupted due to 
+# off/on of the bluetooth driver.
+# * *  *   *   *   /home/pi/ip-ubit 2>&1 > /dev/null
+#
+# I do the following as I only need to know the IP at boot time.  After that I copy it down.
+# @reboot /home/pi/ip-ubit 2>&1 > /dev/null
+#
+# kenneth@ec1213.net
+# apr 2018
+
+if [ `pgrep ip-ubit | wc -l` -gt 2 ]
+then
+	echo "already running"
+	exit
+else
+	echo "executing"
+fi
+
+ubitMAC=""
+
+while [ "$ubitMAC" = "" ]
+do
+# wait until micro:bit is discovered
+/usr/bin/expect <<EOD
+spawn /usr/bin/bluetoothctl
+set timeout 5
+expect "bluetooth"
+send "power off\n"
+sleep 4
+send "power on\n"
+sleep 4
+send "scan on\n"
+expect "micro:bit"
+send "quit\n"
+EOD
+
+ubitMAC=`echo quit | /usr/bin/bluetoothctl | strings | grep -e "micro:bit" | awk '{print $3}'`
+ctrlMAC=`echo quit | /usr/bin/bluetoothctl | strings | grep -e Controller | head -1 | awk '{print $3}'`
+done
+
+MYIP=""
+
+# wait until IP is assigned
+while [ "$MYIP" =  "" ]
+do
+  #MYIP=`/sbin/ifconfig |grep -v 127.0.0.1 |grep 'inet addr:' | head -1 |\
+  #  sed -e 's,.*addr:,,' -e 's, .*,,' -e 's,\., ,g'`
+  MYIP=`/sbin/ifconfig | grep -v 127.0.0.1 | grep -v inet6 | grep 'inet' | head -1 | awk '{print $2}' | sed -e 's,.*addr:,,' -e 's, .*,,' -e 's,\.,_,g'`
+  sleep 1
+done
+
+echo
+echo Controller: $ubitMAC
+echo micro:bit:  $ctrlMAC
+echo MYIP        $MYIP
+
+/home/pi/dsply-ubit.py "$ctrlMAC" "$ubitMAC" "$MYIP"
+
+echo remove $ubitMAC | /usr/bin/bluetoothctl
